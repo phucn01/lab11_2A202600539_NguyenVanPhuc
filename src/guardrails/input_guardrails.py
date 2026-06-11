@@ -38,9 +38,22 @@ def detect_injection(user_input: str) -> bool:
         True if injection detected, False otherwise
     """
     INJECTION_PATTERNS = [
-        # TODO: Add at least 5 regex patterns
-        # Example:
-        # r"ignore (all )?(previous|above) instructions",
+        r"ignore\s+(all\s+)?(previous|above|prior)\s+instructions",
+        r"you\s+are\s+now\s+(DAN|an?\s+unrestricted|a\s+different)",
+        r"(reveal|show|output|print|display)\s+(your\s+)?(system\s+prompt|instructions|config)",
+        r"(pretend|act)\s+(you\s+are|as\s+if|like)\s+you",
+        r"(forget|disregard|override|bypass)\s+(all\s+)?(your\s+)?(instructions|rules|guidelines|constraints)",
+        r"new\s+instructions?\s*:",
+        r"from\s+now\s+on\s+(you|ignore)",
+        r"translate\s+(your\s+)?(system\s+prompt|instructions)\s+to",
+        r"(base64|rot13|hex)\s+.*(instructions|prompt|config)",
+        r"(bỏ qua|bo qua)\s+(mọi\s+)?(hướng dẫn|lệnh|quy tắc)",
+        r"(tiết lộ|cho tôi xem)\s+(mật khẩu|api key|system prompt)",
+        r"jailbreak",
+        r"DAN\s+mode",
+        r"do\s+anything\s+now",
+        r"(admin|system)\s+password",
+        r"fill\s+in\s+the\s+blank",
     ]
 
     for pattern in INJECTION_PATTERNS:
@@ -70,12 +83,18 @@ def topic_filter(user_input: str) -> bool:
     """
     input_lower = user_input.lower()
 
-    # TODO: Implement logic:
-    # 1. If input contains any blocked topic -> return True
-    # 2. If input doesn't contain any allowed topic -> return True
-    # 3. Otherwise -> return False (allow)
+    # Block dangerous topics immediately
+    for topic in BLOCKED_TOPICS:
+        if topic.lower() in input_lower:
+            return True
 
-    pass  # Replace with your implementation
+    # Allow if any banking-related keyword is present
+    for topic in ALLOWED_TOPICS:
+        if topic.lower() in input_lower:
+            return False
+
+    # No allowed topic found — treat as off-topic, block
+    return True
 
 
 # ============================================================
@@ -128,14 +147,22 @@ class InputGuardrailPlugin(base_plugin.BasePlugin):
         self.total_count += 1
         text = self._extract_text(user_message)
 
-        # TODO: Implement logic:
-        # 1. Call detect_injection(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 2. Call topic_filter(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 3. If both are False: return None (let message through)
+        if detect_injection(text):
+            self.blocked_count += 1
+            return self._block_response(
+                "Yêu cầu của bạn đã bị chặn do phát hiện nội dung không an toàn. "
+                "Vui lòng đặt câu hỏi liên quan đến dịch vụ ngân hàng."
+            )
 
-        pass  # Replace with your implementation
+        if topic_filter(text):
+            self.blocked_count += 1
+            return self._block_response(
+                "Tôi chỉ có thể hỗ trợ các câu hỏi về dịch vụ ngân hàng VinBank "
+                "(tài khoản, giao dịch, vay vốn, lãi suất, v.v.). "
+                "Vui lòng đặt câu hỏi liên quan đến ngân hàng."
+            )
+
+        return None
 
 
 # ============================================================

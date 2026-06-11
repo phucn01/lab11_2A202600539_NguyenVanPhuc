@@ -65,32 +65,40 @@ class ConfidenceRouter:
         Returns:
             RoutingDecision with routing action and metadata
         """
-        # TODO 12: Implement routing logic
-        #
-        # 1. Check if action_type is in HIGH_RISK_ACTIONS
-        #    -> If yes: always escalate (action="escalate", priority="high",
-        #       requires_human=True, reason="High-risk action: {action_type}")
-        #
-        # 2. Check confidence thresholds:
-        #    - confidence >= 0.9:
-        #      action="auto_send", priority="low",
-        #      requires_human=False, reason="High confidence"
-        #
-        #    - 0.7 <= confidence < 0.9:
-        #      action="queue_review", priority="normal",
-        #      requires_human=True, reason="Medium confidence — needs review"
-        #
-        #    - confidence < 0.7:
-        #      action="escalate", priority="high",
-        #      requires_human=True, reason="Low confidence — escalating"
+        # High-risk actions always require human approval regardless of confidence
+        if action_type in HIGH_RISK_ACTIONS:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                reason=f"High-risk action: {action_type}",
+                priority="high",
+                requires_human=True,
+            )
 
-        return RoutingDecision(
-            action="auto_send",
-            confidence=confidence,
-            reason="TODO: implement routing logic",
-            priority="low",
-            requires_human=False,
-        )  # TODO: Replace with implementation
+        if confidence >= self.HIGH_THRESHOLD:
+            return RoutingDecision(
+                action="auto_send",
+                confidence=confidence,
+                reason="High confidence",
+                priority="low",
+                requires_human=False,
+            )
+        elif confidence >= self.MEDIUM_THRESHOLD:
+            return RoutingDecision(
+                action="queue_review",
+                confidence=confidence,
+                reason="Medium confidence — needs review",
+                priority="normal",
+                requires_human=True,
+            )
+        else:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                reason="Low confidence — escalating",
+                priority="high",
+                requires_human=True,
+            )
 
 
 # ============================================================
@@ -109,27 +117,64 @@ class ConfidenceRouter:
 hitl_decision_points = [
     {
         "id": 1,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "High-Value Transaction Review",
+        "trigger": (
+            "Customer requests a money transfer exceeding 50 million VND, "
+            "or initiates a transfer to a new/unrecognized beneficiary account, "
+            "or the transaction amount is unusually large relative to account history."
+        ),
+        "hitl_model": "human-in-the-loop",
+        "context_needed": (
+            "Transaction amount, recipient account details, customer account history, "
+            "recent login activity (IP/device), fraud risk score from rule engine, "
+            "time of request (unusual hours flag)."
+        ),
+        "example": (
+            "A customer requests a 200 million VND transfer to a new account at 2AM. "
+            "The agent flags it as high-risk, freezes the transaction, and routes to "
+            "a fraud analyst who reviews the case before approving or rejecting."
+        ),
     },
     {
         "id": 2,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Ambiguous Account Modification",
+        "trigger": (
+            "Agent confidence score < 0.7 on requests that modify sensitive account settings "
+            "(password change, phone number update, adding beneficiary, address change), "
+            "OR when the customer's intent is ambiguous between multiple accounts."
+        ),
+        "hitl_model": "human-on-the-loop",
+        "context_needed": (
+            "Original customer request verbatim, proposed change details, "
+            "current account status, identity verification status (OTP confirmed?), "
+            "recent account activity."
+        ),
+        "example": (
+            "Customer says 'change my phone for account 4321' but has two accounts ending in 4321. "
+            "Agent confidence is 0.6 — it queues the change for a human operator to confirm "
+            "which account and verify identity before applying the modification."
+        ),
     },
     {
         "id": 3,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Escalated Complaint & Emotional Distress",
+        "trigger": (
+            "Negative sentiment detected (anger, frustration, threat of legal action/media), "
+            "OR customer explicitly requests human agent, "
+            "OR complaint involves a claimed bank error with monetary impact > 1 million VND."
+        ),
+        "hitl_model": "human-as-tiebreaker",
+        "context_needed": (
+            "Full conversation history, account balance and recent transactions, "
+            "previous complaint tickets, customer tier (VIP/standard/new), "
+            "disputed transaction details and timestamps."
+        ),
+        "example": (
+            "A customer is angry about an unauthorized debit charge and threatens to "
+            "report to the State Bank of Vietnam (NHNN). The agent detects high negative "
+            "sentiment, escalates immediately to a relationship manager with full context, "
+            "who takes over the conversation and initiates a dispute investigation."
+        ),
     },
 ]
 
